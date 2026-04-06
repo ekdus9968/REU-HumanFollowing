@@ -17,7 +17,7 @@ import sys
 import os
 
 # hand-gesture-recognition-mediapipe clone path(no change)
-GESTURE_REPO = os.path.expanduser('~/hand-gesture-recognition-mediapipe')
+GESTURE_REPO = '/Users/seyoung/Documents/USF/CLASS/Spring2026/CIS4915/REU-HumanFollowing/hand-gesture-recognition-mediapipe'
 sys.path.append(GESTURE_REPO)
 
 import socket
