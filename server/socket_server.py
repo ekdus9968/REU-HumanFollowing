@@ -10,7 +10,7 @@ ref repo (no pull/push here):
 """
 
 import sys
-sys.path.append('/home/pi/HamBot/src')
+sys.path.append('/home/hambot/Desktop/REU-HumanFollowing/Hambot/src')
 
 import socket
 import threading
