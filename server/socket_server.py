@@ -18,7 +18,7 @@ import struct
 import cv2
 import numpy as np
 from picamera2 import Picamera2
-from robot_system.robot import HamBot
+from robot_systems.robot import HamBot
 
 # ====================
 #       SETTING         
@@ -53,19 +53,19 @@ def apply_gesture_command(gesture: str):
     gesture = gesture.strip().upper()
     print(f"[CMD] Send : {gesture}")
     
-    if gesture == "OPEN":
-        bot.set_left_motor_speed(MOTOR_SPEED)
-        bot.set_right_motor_speed(MOTOR_SPEED)
-    elif gesture == "CLOSE":
-        bot.set_left_motor_speed(MOTOR_SPEED)
-        bot.set_right_motor_speed(MOTOR_SPEED)
-    elif gesture == "POINTER":
-        bot.stop_motors()
-    elif gesture == "OK":
-        bot.set_left_motor_speed(-MOTOR_SPEED)
-        bot.set_right_motor_speed(-MOTOR_SPEED)
-    else:
-        print(f"[CMD] UNKNOWN COMMAND: {gesture}")
+    # if gesture == "OPEN":
+    #     bot.set_left_motor_speed(MOTOR_SPEED)
+    #     bot.set_right_motor_speed(MOTOR_SPEED)
+    # elif gesture == "CLOSE":
+    #     bot.set_left_motor_speed(MOTOR_SPEED)
+    #     bot.set_right_motor_speed(MOTOR_SPEED)
+    # elif gesture == "POINTER":
+    #     bot.stop_motors()
+    # elif gesture == "OK":
+    #     bot.set_left_motor_speed(-MOTOR_SPEED)
+    #     bot.set_right_motor_speed(-MOTOR_SPEED)
+    # else:
+    #     print(f"[CMD] UNKNOWN COMMAND: {gesture}")
 
 
 # =================================
