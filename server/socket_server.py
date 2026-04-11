@@ -42,7 +42,7 @@ FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
-TARGET_DISTANCE  = 3000   # mm (3m)
+TARGET_DISTANCE  = 1000   # mm (3m)
 MAX_SPEED        = 75     # 최대 모터 속도 RPM
 DIST_STOP        = 500    # 긴급 정지 임계값 (mm)
 
