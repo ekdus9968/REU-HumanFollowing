@@ -49,7 +49,7 @@ FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
-TARGET_DISTANCE = 2000   # mm (2m)
+TARGET_DISTANCE = 1000   # mm (2m)
 MAX_SPEED       = 75     # 최대 모터 속도 RPM
 
 # Lidar 거리 임계값 (mm)
