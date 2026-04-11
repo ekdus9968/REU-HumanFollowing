@@ -136,7 +136,7 @@ def detect_red_color(frame):
 
     # 화면 중앙(0.5) 기준 정규화 (-1.0 ~ 1.0)
     frame_w = frame.shape[1]
-    x_error = (center_x / frame_w - 0.5) * 2.0
+    x_error = (center_x / frame_w - 0.5) * -2.0
 
     return True, round(x_error, 3), (x, y, w, h)
 
