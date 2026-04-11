@@ -11,19 +11,12 @@ State Machine:
     FOLLOWING  : 색 감지 O + 손 있음         → 100% 속도 + PID
     STOP       : CLOSE gesture              → 정지 (색/손 무시)
 
-Lidar 우선순위 (모든 state):
-    dist < 500mm          → 즉시 정지
-    500mm ~ 1000mm        → 최대 30% 속도
-    1000mm ~ 2000mm       → PID 정상
-    2000mm 이상            → 전진
+Lidar 우선순위:
+    dist < 500mm  → 즉시 정지 (PID 무시)
+    dist > 500mm  → PID가 알아서 (후진/전진/속도 조절)
 
 ref repo (no pull/push here):
     ~/Desktop/REU-HumanFollowing/Hambot/  ← only import using sys.path
-    
-Predicable Issue:
-1. 시작할 때 색 인식이 관건
-카메라 각도랑 거리가 맞아야 빨간 옷이 잡혀. 너무 가까우면 옷이 화면을 꽉 채워서 오히려 노이즈로 튈 수 있어.
-2. 1000m 이내에서 시작하면 longitudinal PID가 후진 명령을 냄
 """
 
 import sys
@@ -49,15 +42,12 @@ FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
-TARGET_DISTANCE = 1000   # mm (2m)
-MAX_SPEED       = 75     # 최대 모터 속도 RPM
+TARGET_DISTANCE  = 3000   # mm (3m)
+MAX_SPEED        = 75     # 최대 모터 속도 RPM
+DIST_STOP        = 500    # 긴급 정지 임계값 (mm)
 
-# Lidar 거리 임계값 (mm)
-DIST_STOP       = 500    # 즉시 정지
-
-# State별 속도 비율
-SPEED_FOLLOWING  = 1.0   # 100%
-SPEED_COLOR_ONLY = 0.5   # 50%
+SPEED_FOLLOWING  = 1.0    # 100%
+SPEED_COLOR_ONLY = 0.5    # 50%
 # ──────────────────────────────────────────────────────
 
 
@@ -68,6 +58,7 @@ class State:
     FOLLOWING  = "FOLLOWING"
     STOP       = "STOP"
 # ──────────────────────────────────────────────────────
+
 
 # ── PID 클래스 ─────────────────────────────────────────
 class PID:
@@ -128,17 +119,6 @@ current_gesture = "NONE"
 lock = threading.Lock()
 # ──────────────────────────────────────────────────────
 
-# ── 전역 변수 ──────────────────────────────────────────
-total_frames        = 0
-tracked_frames      = 0
-distance_errors     = []
-state_transitions   = 0
-correct_transitions = 0
-prev_gesture        = "NONE"
-prev_color_detected = False
-prev_hand_detected  = False
-# ──────────────────────────────────────────────────────
-
 
 def get_front_distance():
     """Lidar 정면(175~185도) 최솟값 반환 (mm)"""
@@ -153,30 +133,16 @@ def get_front_distance():
     return None
 
 
-def get_speed_ratio_from_distance(dist):
-    if dist is None:
-        return 1.0
-
-    if dist < DIST_STOP:
-        return None  # 긴급 정지
-
-    return 1.0  # PID에게 맡김
-
-
 def determine_state(gesture, color_det, hand_det):
     """State 전환 로직"""
     if gesture == "CLOSE":
         return State.STOP
-
     if not color_det:
         return State.IDLE
-
     if color_det and not hand_det:
         return State.COLOR_ONLY
-
     if color_det and hand_det:
         return State.FOLLOWING
-
     return State.IDLE
 
 
@@ -188,49 +154,44 @@ def motor_control_loop():
 
     while True:
         with lock:
-            gesture  = current_gesture
-            c_x_err  = color_x_error
-            c_det    = color_detected
-            h_det    = hand_detected
+            gesture = current_gesture
+            c_x_err = color_x_error
+            c_det   = color_detected
+            h_det   = hand_detected
 
         # ── State 결정 ──
         state = determine_state(gesture, c_det, h_det)
-
         with lock:
             current_state = state
-
-        print(f"[STATE] {state} | color={c_det} hand={h_det} gesture={gesture}")
 
         # ── IDLE / STOP → 정지 ──
         if state in (State.IDLE, State.STOP):
             bot.stop_motors()
             lateral_pid.reset()
             forward_pid.reset()
+            print(f"[STATE] {state:12s} | → STOP")
             time.sleep(0.05)
             continue
 
-        # ── COLOR_ONLY / FOLLOWING → PID ──
+        # ── Lidar 거리 확인 ──
+        dist = get_front_distance()
 
-        # Lidar 거리 확인 (우선순위)
-        dist        = get_front_distance()
-        speed_ratio = get_speed_ratio_from_distance(dist)
-
-        if speed_ratio is None:
-            # Lidar 긴급 정지
+        # 긴급 정지 (500mm 이하)
+        if dist is not None and dist < DIST_STOP:
             bot.stop_motors()
             lateral_pid.reset()
             forward_pid.reset()
-            print(f"[LIDAR] Emergency stop! dist={dist}mm")
+            print(f"[LIDAR] Emergency stop! dist={dist:.0f}mm")
             time.sleep(0.05)
             continue
 
-        # State별 속도 비율 적용
+        # ── State별 속도 비율 ──
         if state == State.COLOR_ONLY:
-            speed_ratio *= SPEED_COLOR_ONLY   # 50%
-        elif state == State.FOLLOWING:
-            speed_ratio *= SPEED_FOLLOWING    # 100%
+            speed_ratio = SPEED_COLOR_ONLY
+        else:
+            speed_ratio = SPEED_FOLLOWING
 
-        # 전후 PID (Lidar)
+        # ── 전후 PID (Lidar) ──
         if dist is not None:
             distance_error = dist - TARGET_DISTANCE
             forward_speed  = forward_pid.compute(distance_error) * speed_ratio
@@ -238,45 +199,19 @@ def motor_control_loop():
             forward_speed = 0.0
             forward_pid.reset()
 
-        # 좌우 PID (색 x_error)
+        # ── 좌우 PID (색 x_error) ──
         turn_correction = lateral_pid.compute(c_x_err) * speed_ratio
 
-        # 최종 모터 속도
-        left_speed  = forward_speed - turn_correction
-        right_speed = forward_speed + turn_correction
-                
-        total_frames += 1
-        if c_det:
-            tracked_frames += 1
-
-        # Mean Distance Error → FOLLOWING일 때만
-        if state == State.FOLLOWING and dist is not None:
-            distance_errors.append(abs(dist - TARGET_DISTANCE))
-
-        # State Transition Accuracy
-        if gesture != prev_gesture or c_det != prev_color_detected or h_det != prev_hand_detected:
-            state_transitions += 1
-            if state == determine_state(gesture, c_det, h_det):
-                correct_transitions += 1
-            prev_gesture        = gesture
-            prev_color_detected = c_det
-            prev_hand_detected  = h_det
-
-        # 출력
-        tracking_rate = (tracked_frames / total_frames * 100) if total_frames > 0 else 0
-        mean_dist_err = (sum(distance_errors) / len(distance_errors)) if distance_errors else 0
-        state_acc     = (correct_transitions / state_transitions * 100) if state_transitions > 0 else 0
-
-        print(f"[METRIC] Track={tracking_rate:.1f}% | DistErr={mean_dist_err:.1f}mm | StateAcc={state_acc:.1f}%")
-
-        # 클램핑
-        left_speed  = max(-MAX_SPEED, min(MAX_SPEED, left_speed))
-        right_speed = max(-MAX_SPEED, min(MAX_SPEED, right_speed))
+        # ── 최종 모터 속도 ──
+        left_speed  = max(-MAX_SPEED, min(MAX_SPEED, forward_speed - turn_correction))
+        right_speed = max(-MAX_SPEED, min(MAX_SPEED, forward_speed + turn_correction))
 
         bot.set_left_motor_speed(left_speed)
         bot.set_right_motor_speed(right_speed)
 
-        print(f"[MOTOR] dist={dist}mm x_err={c_x_err:.2f} L={left_speed:.1f} R={right_speed:.1f} ratio={speed_ratio:.2f}")
+        print(f"[STATE] {state:12s} | dist={str(round(dist)) if dist else 'None':6s}mm | "
+              f"x_err={c_x_err:+.3f} | fwd={forward_speed:+6.1f} | "
+              f"turn={turn_correction:+6.1f} | L={left_speed:+6.1f} R={right_speed:+6.1f}")
 
         time.sleep(0.05)  # 20Hz
 
