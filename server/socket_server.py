@@ -14,11 +14,16 @@ State Machine:
 Lidar 우선순위 (모든 state):
     dist < 500mm          → 즉시 정지
     500mm ~ 1000mm        → 최대 30% 속도
-    1000mm ~ 3000mm       → PID 정상
-    3000mm 이상           → 전진
+    1000mm ~ 2000mm       → PID 정상
+    2000mm 이상            → 전진
 
 ref repo (no pull/push here):
     ~/Desktop/REU-HumanFollowing/Hambot/  ← only import using sys.path
+    
+Predicable Issue:
+1. 시작할 때 색 인식이 관건
+카메라 각도랑 거리가 맞아야 빨간 옷이 잡혀. 너무 가까우면 옷이 화면을 꽉 채워서 오히려 노이즈로 튈 수 있어.
+2. 1000m 이내에서 시작하면 longitudinal PID가 후진 명령을 냄
 """
 
 import sys
@@ -44,7 +49,7 @@ FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
-TARGET_DISTANCE = 3000   # mm (3m)
+TARGET_DISTANCE = 2000   # mm (2m)
 MAX_SPEED       = 75     # 최대 모터 속도 RPM
 
 # Lidar 거리 임계값 (mm)
@@ -63,7 +68,6 @@ class State:
     FOLLOWING  = "FOLLOWING"
     STOP       = "STOP"
 # ──────────────────────────────────────────────────────
-
 
 # ── PID 클래스 ─────────────────────────────────────────
 class PID:
@@ -122,6 +126,17 @@ color_detected  = False
 hand_detected   = False
 current_gesture = "NONE"
 lock = threading.Lock()
+# ──────────────────────────────────────────────────────
+
+# ── 전역 변수 ──────────────────────────────────────────
+total_frames        = 0
+tracked_frames      = 0
+distance_errors     = []
+state_transitions   = 0
+correct_transitions = 0
+prev_gesture        = "NONE"
+prev_color_detected = False
+prev_hand_detected  = False
 # ──────────────────────────────────────────────────────
 
 
@@ -229,6 +244,30 @@ def motor_control_loop():
         # 최종 모터 속도
         left_speed  = forward_speed - turn_correction
         right_speed = forward_speed + turn_correction
+                
+        total_frames += 1
+        if c_det:
+            tracked_frames += 1
+
+        # Mean Distance Error → FOLLOWING일 때만
+        if state == State.FOLLOWING and dist is not None:
+            distance_errors.append(abs(dist - TARGET_DISTANCE))
+
+        # State Transition Accuracy
+        if gesture != prev_gesture or c_det != prev_color_detected or h_det != prev_hand_detected:
+            state_transitions += 1
+            if state == determine_state(gesture, c_det, h_det):
+                correct_transitions += 1
+            prev_gesture        = gesture
+            prev_color_detected = c_det
+            prev_hand_detected  = h_det
+
+        # 출력
+        tracking_rate = (tracked_frames / total_frames * 100) if total_frames > 0 else 0
+        mean_dist_err = (sum(distance_errors) / len(distance_errors)) if distance_errors else 0
+        state_acc     = (correct_transitions / state_transitions * 100) if state_transitions > 0 else 0
+
+        print(f"[METRIC] Track={tracking_rate:.1f}% | DistErr={mean_dist_err:.1f}mm | StateAcc={state_acc:.1f}%")
 
         # 클램핑
         left_speed  = max(-MAX_SPEED, min(MAX_SPEED, left_speed))
