@@ -42,7 +42,7 @@ FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
-TARGET_DISTANCE  = 1000   # mm (3m)
+TARGET_DISTANCE  = 500   # mm (3m)
 MAX_SPEED        = 75     # 최대 모터 속도 RPM
 DIST_STOP        = 500    # 긴급 정지 임계값 (mm)
 
@@ -105,7 +105,7 @@ picam2.start()
 
 
 # ── PID 초기화 ─────────────────────────────────────────
-lateral_pid = PID(Kp=30.0, Ki=0.0, Kd=5.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=5.0, Ki=0.0, Kd=5.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 # ──────────────────────────────────────────────────────
 
