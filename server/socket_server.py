@@ -49,7 +49,7 @@ DIST_FRONT_STOP  = 500    # front emergency stop threshold (mm)
 DIST_REAR_STOP   = 1000   # rear obstacle reverse block threshold (mm)
 
 SPEED_FOLLOWING  = 1.0    # 100%
-SPEED_COLOR_ONLY = 0.5    # 50%
+SPEED_COLOR_ONLY = 1.5    # 50%
 # ──────────────────────────────────────────────────────
 
 
