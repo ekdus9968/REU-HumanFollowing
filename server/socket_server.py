@@ -49,6 +49,7 @@ SPEED_HAND_ONLY  = 0.2    # 20%
 SPIN_SPEED       = 2     # REDETECT spin speed (RPM)
 
 color_lost_count = 0
+color_found_count = 0
 COLOR_LOST_THRESHOLD = 10 
 # ──────────────────────────────────────────────────────
 
@@ -178,6 +179,8 @@ def motor_control_loop():
             color_lost_count = 0  # 리셋
         else:
             color_lost_count += 1
+            color_found_count = 0
+
 
         # determine_state에 color_lost_count 전달
         state = determine_state(gesture, c_det, h_det, t_found, color_lost_count)
