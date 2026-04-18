@@ -7,11 +7,18 @@ Channel 2 (port 5001): Send JSON control payload -> Pi state machine
 
 JSON payload sent to Pi:
     {
-        "gesture"       : "OPEN" | "CLOSE" | "NONE",
+        "gesture"       : "OPEN" | "CLOSE" | "POINTER" | "OK" | "PEACE" | "UD_OPEN" | "UD_CLOSE" | "NONE",
         "color_x_error" : float (-1.0 ~ 1.0),
+        "hand_x_error"  : float (-1.0 ~ 1.0),
         "color_detected": bool,
         "hand_detected" : bool
     }
+
+Gesture actions:
+    UP_OPEN    -> FOLLOWING mode
+    UP_CLOSE   -> STOP
+    PEACE   -> Shutdown client program
+    Others  -> passed to Pi for future use
 
 Ref repo (do not modify):
     ~/Documents/USF/CLASS/Spring2026/CIS4915/REU-HumanFollowing/hand-gesture-recognition-mediapipe/
@@ -55,23 +62,24 @@ args = parser.parse_args()
 
 
 # ── Red Color HSV Range ────────────────────────────────
-# Red wraps around the HSV hue axis, so two ranges are needed
 RED_LOWER1 = np.array([0,   120, 70])
 RED_UPPER1 = np.array([10,  255, 255])
 RED_LOWER2 = np.array([170, 120, 70])
 RED_UPPER2 = np.array([180, 255, 255])
 
-MIN_COLOR_AREA = 3000  # minimum contour area to filter noise
+MIN_COLOR_AREA = 3000
 # ──────────────────────────────────────────────────────
 
 
-# ── Gesture Labels ─────────────────────────────────────
-# Must match the order in keypoint_classifier_label.csv
+# ── Gesture Labels (must match keypoint_classifier_label.csv) ──
 GESTURE_LABELS = {
     0: "OPEN",
     1: "CLOSE",
     2: "POINTER",
     3: "OK",
+    4: "PEACE",
+    5: "UD_OPEN",
+    6: "UD_CLOSE",
 }
 # ──────────────────────────────────────────────────────
 
@@ -92,6 +100,7 @@ keypoint_classifier = KeyPointClassifier()
 current_payload = {
     "gesture":        "NONE",
     "color_x_error":  0.0,
+    "hand_x_error":   0.0,
     "color_detected": False,
     "hand_detected":  False,
 }
@@ -103,16 +112,14 @@ def detect_red_color(frame):
     """
     Detect red color in frame using HSV segmentation.
     Returns (color_detected, x_error, bbox).
-    x_error is normalized to [-1.0, +1.0] relative to frame center.
+    x_error normalized to [-1.0, +1.0] relative to frame center.
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    # Merge two red hue range masks
     mask1 = cv2.inRange(hsv, RED_LOWER1, RED_UPPER1)
     mask2 = cv2.inRange(hsv, RED_LOWER2, RED_UPPER2)
     mask  = cv2.bitwise_or(mask1, mask2)
 
-    # Morphological operations to remove noise and fill gaps
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  np.ones((5, 5),   np.uint8))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((10, 10), np.uint8))
 
@@ -121,7 +128,6 @@ def detect_red_color(frame):
     if not contours:
         return False, 0.0, None
 
-    # Select largest contour as body candidate
     largest = max(contours, key=cv2.contourArea)
     if cv2.contourArea(largest) < MIN_COLOR_AREA:
         return False, 0.0, None
@@ -129,15 +135,13 @@ def detect_red_color(frame):
     x, y, w, h = cv2.boundingRect(largest)
     center_x    = x + w / 2.0
     frame_w     = frame.shape[1]
-
-    # Normalize to [-1.0, +1.0] relative to frame center
-    x_error = (center_x / frame_w - 0.5) * 2.0
+    x_error     = (center_x / frame_w - 0.5) * 2.0
 
     return True, round(x_error, 3), (x, y, w, h)
 
 
 def calc_landmark_list(image, landmarks):
-    """Convert MediaPipe landmarks to normalized relative coordinate list for KeyPointClassifier."""
+    """Convert MediaPipe landmarks to normalized relative coordinate list."""
     h, w = image.shape[:2]
     pts = [[min(int(lm.x * w), w - 1),
              min(int(lm.y * h), h - 1)]
@@ -148,6 +152,17 @@ def calc_landmark_list(image, landmarks):
     flat     = [v for xy in relative for v in xy]
     max_val  = max(map(abs, flat)) or 1
     return [v / max_val for v in flat]
+
+
+def calc_hand_x_error(frame, landmarks):
+    """
+    Compute hand center x_error from bounding box of all 21 landmarks.
+    Returns float in [-1.0, +1.0].
+    """
+    frame_w = frame.shape[1]
+    x_coords = [lm.x for lm in landmarks.landmark]
+    hand_center_x = (min(x_coords) + max(x_coords)) / 2.0
+    return round((hand_center_x - 0.5) * 2.0, 3)
 
 
 # ── Channel 1: Video Receive + Perception (main thread) ──
@@ -205,6 +220,7 @@ def video_client():
 
             gesture       = "NONE"
             hand_detected = False
+            hand_x_error  = 0.0
 
             if results.multi_hand_landmarks:
                 hand_landmarks = results.multi_hand_landmarks[0]
@@ -212,6 +228,7 @@ def video_client():
                 hand_sign_id   = keypoint_classifier(landmark_list)
                 gesture        = GESTURE_LABELS.get(hand_sign_id, "NONE")
                 hand_detected  = True
+                hand_x_error   = calc_hand_x_error(frame, hand_landmarks)
 
                 mp.solutions.drawing_utils.draw_landmarks(
                     frame, hand_landmarks, mp_hands.HAND_CONNECTIONS
@@ -219,10 +236,18 @@ def video_client():
                 cv2.putText(frame, f"Gesture: {gesture}",
                             (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
+            # PEACE -> shutdown client
+            if gesture == "PEACE":
+                print("[EXIT] POINTER gesture detected. Shutting down.")
+                cv2.destroyAllWindows()
+                sock.close()
+                sys.exit(0)
+
             # Update shared payload
             payload = {
                 "gesture":        gesture,
                 "color_x_error":  color_x_error,
+                "hand_x_error":   hand_x_error,
                 "color_detected": color_detected,
                 "hand_detected":  hand_detected,
             }
@@ -230,7 +255,7 @@ def video_client():
                 current_payload = payload
 
             # Overlay UI
-            cv2.line(frame, (w // 2, 0), (w // 2, h), (255, 0, 0), 1)  # center line
+            cv2.line(frame, (w // 2, 0), (w // 2, h), (255, 0, 0), 1)
             cv2.putText(frame, f"FPS: {fps:.1f}",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
 
@@ -256,7 +281,6 @@ def command_client():
 
             message = json.dumps(payload) + '\n'
             sock.sendall(message.encode('utf-8'))
-
             time.sleep(0.05)  # 20 Hz
 
     except (BrokenPipeError, ConnectionResetError):
@@ -269,11 +293,10 @@ def command_client():
 if __name__ == '__main__':
     print("=== REU-HumanFollowing | Gesture Client Start ===")
     print(f"Pi: {args.host} | video:{args.video_port} | cmd:{args.cmd_port}")
+    print("Gestures: UD_OPEN=follow | UD_CLOSE=stop | POINTER=quit")
     print("Press 'q' in video window to quit")
 
-    # Command sender runs in background thread
     t_cmd = threading.Thread(target=command_client, daemon=True)
     t_cmd.start()
 
-    # Video receive + perception runs on main thread (OpenCV window requirement)
     video_client()
