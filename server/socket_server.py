@@ -103,7 +103,7 @@ picam2.start()
 
 
 # ── PID Initialization ─────────────────────────────────
-lateral_pid = PID(Kp=3.0,  Ki=0.0, Kd=1.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=5.0,  Ki=0.0, Kd=1.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 # ──────────────────────────────────────────────────────
 
