@@ -159,7 +159,7 @@ def determine_state(gesture, color_det, hand_det, target_found):
     return State.IDLE
 
 
-ddef motor_control_loop():
+def motor_control_loop():
     """State machine + PID motor control loop at 20 Hz."""
     global current_state, last_color_x_err, target_ever_found, color_lost_count, stop_gesture_count
 
