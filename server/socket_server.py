@@ -46,7 +46,7 @@ MAX_SPEED        = 75     # max motor speed (RPM)
 SPEED_FOLLOWING  = 1.0    # 100%
 SPEED_COLOR_ONLY = 0.7    # 70%
 SPEED_HAND_ONLY  = 0.2    # 20%
-SPIN_SPEED       = 10     # REDETECT spin speed (RPM)
+SPIN_SPEED       = 2     # REDETECT spin speed (RPM)
 # ──────────────────────────────────────────────────────
 
 
