@@ -6,14 +6,12 @@ Channel 1 (port 5000): Pi camera -> send to Mac
 Channel 2 (port 5001): Receive JSON -> State Machine + PID control
 
 State Machine:
-    IDLE       : Initial state, no target found         -> Stop
-    FOLLOWING  : color O + hand O                       -> 100% speed PID
-    COLOR_ONLY : color O + hand X                       -> 70% speed PID (color x_error)
-    HAND_ONLY  : color X + hand O                       -> 20% speed PID (hand x_error)
-    REDETECT   : color X + hand X (after target found)  -> 360 spin at speed 10
-                  spins in last known direction first
-                  stops immediately when color detected
-    STOP       : CLOSE gesture                          -> Stop (overrides all)
+    IDLE       : Initial state, no target found          -> Stop
+    FOLLOWING  : color O + hand O + gesture UD_OPEN      -> 100% speed PID
+    COLOR_ONLY : color O + (no hand or non-UD_OPEN)      -> 70% speed PID (color x_error)
+    HAND_ONLY  : color X + hand O                        -> 20% speed PID (hand x_error)
+    REDETECT   : color X + hand X (after target found)   -> 360 spin at speed 10
+    STOP       : UD_CLOSE gesture                        -> Stop (overrides all)
 
 Ref repo (do not modify):
     ~/Desktop/REU-HumanFollowing/Hambot/  <- import via sys.path only
@@ -111,17 +109,14 @@ forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 
 
 # ── Global State ───────────────────────────────────────
-current_state    = State.IDLE
-color_x_error    = 0.0
-hand_x_error     = 0.0
-color_detected   = False
-hand_detected    = False
-current_gesture  = "NONE"
-
-# Last known direction for REDETECT
-last_color_x_err = 0.0   # positive = target was to the right, negative = left
-target_ever_found = False  # True once color has been detected at least once
-
+current_state     = State.IDLE
+color_x_error     = 0.0
+hand_x_error      = 0.0
+color_detected    = False
+hand_detected     = False
+current_gesture   = "NONE"
+last_color_x_err  = 0.0
+target_ever_found = False
 lock = threading.Lock()
 # ──────────────────────────────────────────────────────
 
@@ -141,15 +136,14 @@ def get_front_distance():
 
 def determine_state(gesture, color_det, hand_det, target_found):
     """State transition logic."""
-    if gesture == "UP_CLOSE":
+    if gesture == "UD_CLOSE":
         return State.STOP
     if color_det and hand_det and gesture == "UD_OPEN":
         return State.FOLLOWING
-    if color_det and not hand_det:
+    if color_det:
         return State.COLOR_ONLY
     if not color_det and hand_det:
         return State.HAND_ONLY
-    # color X + hand X
     if target_found:
         return State.REDETECT
     return State.IDLE
@@ -163,19 +157,19 @@ def motor_control_loop():
 
     while True:
         with lock:
-            gesture   = current_gesture
-            c_x_err   = color_x_error
-            h_x_err   = hand_x_error
-            c_det     = color_detected
-            h_det     = hand_detected
-            t_found   = target_ever_found
-            last_x    = last_color_x_err
+            gesture  = current_gesture
+            c_x_err  = color_x_error
+            h_x_err  = hand_x_error
+            c_det    = color_detected
+            h_det    = hand_detected
+            t_found  = target_ever_found
+            last_x   = last_color_x_err
 
-        # Update target_ever_found
+        # Update last known direction when color is visible
         if c_det:
             with lock:
                 target_ever_found = True
-                last_color_x_err  = c_x_err  # save last known direction
+                last_color_x_err  = c_x_err
 
         # Determine state
         state = determine_state(gesture, c_det, h_det, t_found)
@@ -195,39 +189,39 @@ def motor_control_loop():
         if state == State.REDETECT:
             lateral_pid.reset()
             forward_pid.reset()
-
-            # Spin direction based on last known x_error
-            # last_x > 0 means target was to the right -> spin right (positive turn)
-            # last_x < 0 means target was to the left  -> spin left (negative turn)
             if last_x >= 0:
-                left_speed  = SPIN_SPEED
+                left_speed  =  SPIN_SPEED
                 right_speed = -SPIN_SPEED
             else:
                 left_speed  = -SPIN_SPEED
-                right_speed = SPIN_SPEED
-
+                right_speed =  SPIN_SPEED
             bot.set_left_motor_speed(left_speed)
             bot.set_right_motor_speed(right_speed)
-            print(f"[STATE] REDETECT     | spinning dir={'RIGHT' if last_x >= 0 else 'LEFT'} speed={SPIN_SPEED}")
+            print(f"[STATE] REDETECT     | spinning {'RIGHT' if last_x >= 0 else 'LEFT'} speed={SPIN_SPEED}")
             time.sleep(0.05)
             continue
 
-        # ── PID control ────────────────────────────────
+        # ── Read LiDAR for all PID states ─────────────
+        dist = get_front_distance()
 
-        # Choose speed ratio and x_error source based on state
+        # ── Choose speed ratio and lateral error ───────
         if state == State.FOLLOWING:
-            speed_ratio  = SPEED_FOLLOWING
-            lateral_err  = c_x_err   # use color x_error
+            speed_ratio = SPEED_FOLLOWING
+            lateral_err = c_x_err
 
         elif state == State.COLOR_ONLY:
-            speed_ratio  = SPEED_COLOR_ONLY
-            lateral_err  = c_x_err   # use color x_error
+            speed_ratio = SPEED_COLOR_ONLY
+            lateral_err = c_x_err
 
         elif state == State.HAND_ONLY:
-            speed_ratio  = SPEED_HAND_ONLY
-            lateral_err  = h_x_err   # use hand x_error
+            speed_ratio = SPEED_HAND_ONLY
+            lateral_err = h_x_err
 
-        # Longitudinal PID (LiDAR)
+        else:
+            speed_ratio = 0.0
+            lateral_err = 0.0
+
+        # ── Longitudinal PID (LiDAR) ───────────────────
         if dist is not None:
             distance_error = dist - TARGET_DISTANCE
             forward_speed  = forward_pid.compute(distance_error) * speed_ratio
@@ -235,10 +229,10 @@ def motor_control_loop():
             forward_speed = 0.0
             forward_pid.reset()
 
-        # Lateral PID
+        # ── Lateral PID ────────────────────────────────
         turn_correction = lateral_pid.compute(lateral_err) * speed_ratio
 
-        # Final motor speeds
+        # ── Final motor speeds ─────────────────────────
         left_speed  = max(-MAX_SPEED, min(MAX_SPEED, forward_speed - turn_correction))
         right_speed = max(-MAX_SPEED, min(MAX_SPEED, forward_speed + turn_correction))
 
@@ -267,7 +261,7 @@ def video_stream_server():
     try:
         while True:
             frame = picam2.capture_array()
-            # frame = cv2.rotate(frame, cv2.ROTATE_180)
+            frame = cv2.rotate(frame, cv2.ROTATE_180)  
             ret, encoded = cv2.imencode(
                 '.jpg', frame,
                 [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
