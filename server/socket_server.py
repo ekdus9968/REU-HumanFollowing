@@ -6,12 +6,12 @@ Channel 1 (port 5000): Pi camera -> send to Mac
 Channel 2 (port 5001): Receive JSON -> State Machine + PID control
 
 State Machine:
-    IDLE       : Initial state, no target found          -> Stop
-    FOLLOWING  : color O + hand O + gesture UD_OPEN      -> 100% speed PID
-    COLOR_ONLY : color O + (no hand or non-UD_OPEN)      -> 70% speed PID (color x_error)
-    HAND_ONLY  : color X + hand O                        -> 20% speed PID (hand x_error)
-    REDETECT   : color X + hand X (after target found)   -> 360 spin at speed 10
-    STOP       : UD_CLOSE gesture                        -> Stop (overrides all)
+    IDLE       : Initial state, color+UD_OPEN not yet detected -> Stop
+    FOLLOWING  : color O + hand O + gesture UD_OPEN            -> 100% speed PID
+    COLOR_ONLY : color O + (no hand or non-UD_OPEN gesture)    -> 70% speed PID
+    HAND_ONLY  : color X + hand O                              -> 20% speed PID (hand x_error)
+    REDETECT   : color X + hand X, lost for 10+ frames         -> spin speed=2
+    STOP       : UD_CLOSE gesture                              -> Stop (overrides all)
 
 Ref repo (do not modify):
     ~/Desktop/REU-HumanFollowing/Hambot/  <- import via sys.path only
@@ -40,17 +40,14 @@ FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
-TARGET_DISTANCE  = 500    # mm (0.5m target following distance)
-MAX_SPEED        = 10     # max motor speed (RPM)
+TARGET_DISTANCE      = 500   # mm (0.5m)
+MAX_SPEED            = 10    # max motor speed (RPM)
+SPIN_SPEED           = 2     # REDETECT spin speed (RPM)
+COLOR_LOST_THRESHOLD = 10    # frames before entering REDETECT
 
-SPEED_FOLLOWING  = 1.0    # 100%
-SPEED_COLOR_ONLY = 0.7    # 70%
-SPEED_HAND_ONLY  = 0.2    # 20%
-SPIN_SPEED       = 2     # REDETECT spin speed (RPM)
-
-color_lost_count = 0
-color_found_count = 0
-COLOR_LOST_THRESHOLD = 10 
+SPEED_FOLLOWING  = 1.0       # 100%
+SPEED_COLOR_ONLY = 0.7       # 70%
+SPEED_HAND_ONLY  = 0.2       # 20%
 # ──────────────────────────────────────────────────────
 
 
@@ -120,7 +117,8 @@ color_detected    = False
 hand_detected     = False
 current_gesture   = "NONE"
 last_color_x_err  = 0.0
-target_ever_found = False
+target_ever_found = False  # True only after color + UD_OPEN detected together
+color_lost_count  = 0      # frames color has been lost consecutively
 lock = threading.Lock()
 # ──────────────────────────────────────────────────────
 
@@ -140,50 +138,52 @@ def get_front_distance():
 
 def determine_state(gesture, color_det, hand_det, target_found):
     """State transition logic."""
-    if gesture == "UD_CLOSE" or gesture == "CLOSE":
+    # STOP always takes priority
+    if gesture == "UD_CLOSE":
         return State.STOP
+
+    # Before target is found: stay IDLE no matter what
+    if not target_found:
+        return State.IDLE
+
+    # After target found: allow state transitions
     if color_det and hand_det and gesture == "UD_OPEN":
-        return State.FOLLOWING
-    if color_det and hand_det and gesture == "OPEN":
         return State.FOLLOWING
     if color_det:
         return State.COLOR_ONLY
     if not color_det and hand_det:
         return State.HAND_ONLY
-    if target_found and lost_count >= COLOR_LOST_THRESHOLD:
+    if color_lost_count >= COLOR_LOST_THRESHOLD:
         return State.REDETECT
     return State.IDLE
 
 
 def motor_control_loop():
     """State machine + PID motor control loop at 20 Hz."""
-    global current_state, last_color_x_err, target_ever_found
+    global current_state, last_color_x_err, target_ever_found, color_lost_count
 
     print("[MOTOR] Control loop started")
 
     while True:
         with lock:
-            gesture  = current_gesture
-            c_x_err  = color_x_error
-            h_x_err  = hand_x_error
-            c_det    = color_detected
-            h_det    = hand_detected
-            t_found  = target_ever_found
-            last_x   = last_color_x_err
+            gesture = current_gesture
+            c_x_err = color_x_error
+            h_x_err = hand_x_error
+            c_det   = color_detected
+            h_det   = hand_detected
+            t_found = target_ever_found
+            last_x  = last_color_x_err
 
-        # Update last known direction when color is visible
+        # Set target_ever_found only when color + UD_OPEN detected together
+        if c_det and gesture == "UD_OPEN":
+            target_ever_found = True
+
+        # Update color lost count and last known direction
         if c_det:
-            with lock:
-                target_ever_found = True
-                last_color_x_err  = c_x_err
-            color_lost_count = 0  # 리셋
+            last_color_x_err = c_x_err
+            color_lost_count = 0
         else:
             color_lost_count += 1
-            color_found_count = 0
-
-
-        # determine_state에 color_lost_count 전달
-        state = determine_state(gesture, c_det, h_det, t_found, color_lost_count)
 
         # Determine state
         state = determine_state(gesture, c_det, h_det, t_found)
@@ -199,45 +199,45 @@ def motor_control_loop():
             time.sleep(0.05)
             continue
 
-        # ── REDETECT -> 360 spin ───────────────────────
+        # ── REDETECT -> spin ───────────────────────────
         if state == State.REDETECT:
             lateral_pid.reset()
             forward_pid.reset()
-            
+
+            # Stop spinning immediately when color is detected
             if c_det:
                 bot.stop_motors()
                 time.sleep(0.05)
                 continue
-            
+
+            # Spin in last known direction
             if last_x >= 0:
                 left_speed  =  SPIN_SPEED
                 right_speed = -SPIN_SPEED
             else:
                 left_speed  = -SPIN_SPEED
                 right_speed =  SPIN_SPEED
+
             bot.set_left_motor_speed(left_speed)
             bot.set_right_motor_speed(right_speed)
             print(f"[STATE] REDETECT     | spinning {'RIGHT' if last_x >= 0 else 'LEFT'} speed={SPIN_SPEED}")
-            
             time.sleep(0.05)
             continue
 
-        # ── Read LiDAR for all PID states ─────────────
+        # ── Read LiDAR ────────────────────────────────
+        dist = None
         dist = get_front_distance()
 
-        # ── Choose speed ratio and lateral error ───────
+        # ── Speed ratio and lateral error by state ─────
         if state == State.FOLLOWING:
             speed_ratio = SPEED_FOLLOWING
             lateral_err = c_x_err
-
         elif state == State.COLOR_ONLY:
             speed_ratio = SPEED_COLOR_ONLY
             lateral_err = c_x_err
-
         elif state == State.HAND_ONLY:
             speed_ratio = SPEED_HAND_ONLY
             lateral_err = h_x_err
-
         else:
             speed_ratio = 0.0
             lateral_err = 0.0
@@ -282,7 +282,7 @@ def video_stream_server():
     try:
         while True:
             frame = picam2.capture_array()
-            frame = cv2.rotate(frame, cv2.ROTATE_180)  
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
             ret, encoded = cv2.imencode(
                 '.jpg', frame,
                 [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
