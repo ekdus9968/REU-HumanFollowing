@@ -103,7 +103,7 @@ picam2.start()
 
 
 # ── PID Initialization ─────────────────────────────────
-lateral_pid = PID(Kp=5.0,  Ki=0.0, Kd=1.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=3.0,  Ki=0.0, Kd=1.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 # ──────────────────────────────────────────────────────
 
@@ -189,6 +189,12 @@ def motor_control_loop():
         if state == State.REDETECT:
             lateral_pid.reset()
             forward_pid.reset()
+            
+            if c_det:
+                bot.stop_motors()
+                time.sleep(0.05)
+                continue
+            
             if last_x >= 0:
                 left_speed  =  SPIN_SPEED
                 right_speed = -SPIN_SPEED
@@ -198,6 +204,7 @@ def motor_control_loop():
             bot.set_left_motor_speed(left_speed)
             bot.set_right_motor_speed(right_speed)
             print(f"[STATE] REDETECT     | spinning {'RIGHT' if last_x >= 0 else 'LEFT'} speed={SPIN_SPEED}")
+            
             time.sleep(0.05)
             continue
 
