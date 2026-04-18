@@ -119,6 +119,7 @@ current_gesture   = "NONE"
 last_color_x_err  = 0.0
 target_ever_found = False  # True only after color + UD_OPEN detected together
 color_lost_count  = 0      # frames color has been lost consecutively
+stop_gesture_count = 0
 lock = threading.Lock()
 # ──────────────────────────────────────────────────────
 
@@ -158,9 +159,9 @@ def determine_state(gesture, color_det, hand_det, target_found):
     return State.IDLE
 
 
-def motor_control_loop():
+ddef motor_control_loop():
     """State machine + PID motor control loop at 20 Hz."""
-    global current_state, last_color_x_err, target_ever_found, color_lost_count
+    global current_state, last_color_x_err, target_ever_found, color_lost_count, stop_gesture_count
 
     print("[MOTOR] Control loop started")
 
@@ -174,6 +175,13 @@ def motor_control_loop():
             t_found = target_ever_found
             last_x  = last_color_x_err
 
+        # UD_CLOSE debounce - 5 consecutive frames to trigger STOP
+        if gesture == "UD_CLOSE":
+            stop_gesture_count += 1
+        else:
+            stop_gesture_count = 0
+        filtered_gesture = "UD_CLOSE" if stop_gesture_count >= 5 else gesture
+
         # Set target_ever_found only when color + UD_OPEN detected together
         if c_det and gesture == "UD_OPEN":
             target_ever_found = True
@@ -185,8 +193,8 @@ def motor_control_loop():
         else:
             color_lost_count += 1
 
-        # Determine state
-        state = determine_state(gesture, c_det, h_det, t_found)
+        # Determine state using filtered gesture
+        state = determine_state(filtered_gesture, c_det, h_det, t_found)
         with lock:
             current_state = state
 
@@ -204,13 +212,11 @@ def motor_control_loop():
             lateral_pid.reset()
             forward_pid.reset()
 
-            # Stop spinning immediately when color is detected
             if c_det:
                 bot.stop_motors()
                 time.sleep(0.05)
                 continue
 
-            # Spin in last known direction
             if last_x >= 0:
                 left_speed  =  SPIN_SPEED
                 right_speed = -SPIN_SPEED
@@ -225,7 +231,6 @@ def motor_control_loop():
             continue
 
         # ── Read LiDAR ────────────────────────────────
-        dist = None
         dist = get_front_distance()
 
         # ── Speed ratio and lateral error by state ─────
