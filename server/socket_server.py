@@ -41,12 +41,15 @@ FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
 TARGET_DISTANCE  = 500    # mm (0.5m target following distance)
-MAX_SPEED        = 75     # max motor speed (RPM)
+MAX_SPEED        = 10     # max motor speed (RPM)
 
 SPEED_FOLLOWING  = 1.0    # 100%
 SPEED_COLOR_ONLY = 0.7    # 70%
 SPEED_HAND_ONLY  = 0.2    # 20%
 SPIN_SPEED       = 2     # REDETECT spin speed (RPM)
+
+color_lost_count = 0
+COLOR_LOST_THRESHOLD = 10 
 # ──────────────────────────────────────────────────────
 
 
@@ -136,15 +139,17 @@ def get_front_distance():
 
 def determine_state(gesture, color_det, hand_det, target_found):
     """State transition logic."""
-    if gesture == "UD_CLOSE":
+    if gesture == "UD_CLOSE" or gesture == "CLOSE":
         return State.STOP
     if color_det and hand_det and gesture == "UD_OPEN":
+        return State.FOLLOWING
+    if color_det and hand_det and gesture == "OPEN":
         return State.FOLLOWING
     if color_det:
         return State.COLOR_ONLY
     if not color_det and hand_det:
         return State.HAND_ONLY
-    if target_found:
+    if target_found and lost_count >= COLOR_LOST_THRESHOLD:
         return State.REDETECT
     return State.IDLE
 
@@ -170,6 +175,12 @@ def motor_control_loop():
             with lock:
                 target_ever_found = True
                 last_color_x_err  = c_x_err
+            color_lost_count = 0  # 리셋
+        else:
+            color_lost_count += 1
+
+        # determine_state에 color_lost_count 전달
+        state = determine_state(gesture, c_det, h_det, t_found, color_lost_count)
 
         # Determine state
         state = determine_state(gesture, c_det, h_det, t_found)
