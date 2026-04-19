@@ -41,7 +41,7 @@ FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
 TARGET_DISTANCE      = 500   # mm (0.5m)
-MAX_SPEED            = 10    # max motor speed (RPM)
+MAX_SPEED            = 50    # max motor speed (RPM)
 SPIN_SPEED           = 2     # REDETECT spin speed (RPM)
 COLOR_LOST_THRESHOLD = 10    # frames before entering REDETECT
 
@@ -158,7 +158,6 @@ def determine_state(gesture, color_det, hand_det, target_found):
         return State.REDETECT
     return State.IDLE
 
-
 def motor_control_loop():
     """State machine + PID motor control loop at 20 Hz."""
     global current_state, last_color_x_err, target_ever_found, color_lost_count, stop_gesture_count
@@ -175,15 +174,15 @@ def motor_control_loop():
             t_found = target_ever_found
             last_x  = last_color_x_err
 
-        # CLOSE debounce - 5 consecutive frames to trigger STOP
-        if gesture == "CLOSE":
+        # UD_CLOSE debounce - 5 consecutive frames to trigger STOP
+        if gesture == "UD_CLOSE":
             stop_gesture_count += 1
         else:
             stop_gesture_count = 0
-        filtered_gesture = "CLOSE" if stop_gesture_count >= 5 else gesture
+        filtered_gesture = "UD_CLOSE" if stop_gesture_count >= 5 else gesture
 
-        # Set target_ever_found only when color + OPEN detected together
-        if c_det and gesture == "OPEN":
+        # target_ever_found = True when color OR hand detected
+        if c_det or h_det:
             target_ever_found = True
 
         # Update color lost count and last known direction
@@ -271,37 +270,6 @@ def motor_control_loop():
               f"ratio={speed_ratio:.1f}")
 
         time.sleep(0.05)  # 20 Hz
-
-
-# ── Channel 1: Video Stream (Pi -> Mac) ───────────────
-def video_stream_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((HOST, VIDEO_PORT))
-    server.listen(1)
-    print(f"[VIDEO] Waiting... port {VIDEO_PORT}")
-
-    conn, addr = server.accept()
-    print(f"[VIDEO] Connected: {addr}")
-
-    try:
-        while True:
-            frame = picam2.capture_array()
-            frame = cv2.rotate(frame, cv2.ROTATE_180)
-            ret, encoded = cv2.imencode(
-                '.jpg', frame,
-                [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
-            )
-            if not ret:
-                continue
-            data = encoded.tobytes()
-            conn.sendall(struct.pack('>I', len(data)) + data)
-
-    except (BrokenPipeError, ConnectionResetError):
-        print("[VIDEO] Mac disconnected")
-    finally:
-        conn.close()
-        server.close()
 
 
 # ── Channel 2: Command Receive (Mac -> Pi) ────────────
