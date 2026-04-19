@@ -105,7 +105,7 @@ picam2.start()
 
 
 # ── PID Initialization ─────────────────────────────────
-lateral_pid = PID(Kp=10.0, Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=7.0, Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 # ──────────────────────────────────────────────────────
 
@@ -185,7 +185,10 @@ def motor_control_loop():
         if c_det:
             last_color_x_err = c_x_err
             color_lost_count = 0
+            lateral_err = c_x_err
+
         else:
+            lateral_err = last_color_x_err  # 색 잃어도 마지막 값 유지
             color_lost_count += 1
 
         # Determine state using target_ever_found directly (not stale copy)
