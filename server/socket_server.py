@@ -158,6 +158,7 @@ def determine_state(gesture, color_det, hand_det, target_found):
         return State.REDETECT
     return State.IDLE
 
+
 def motor_control_loop():
     """State machine + PID motor control loop at 20 Hz."""
     global current_state, last_color_x_err, target_ever_found, color_lost_count, stop_gesture_count
@@ -270,6 +271,37 @@ def motor_control_loop():
               f"ratio={speed_ratio:.1f}")
 
         time.sleep(0.05)  # 20 Hz
+
+
+# ── Channel 1: Video Stream (Pi -> Mac) ───────────────
+def video_stream_server():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind((HOST, VIDEO_PORT))
+    server.listen(1)
+    print(f"[VIDEO] Waiting... port {VIDEO_PORT}")
+
+    conn, addr = server.accept()
+    print(f"[VIDEO] Connected: {addr}")
+
+    try:
+        while True:
+            frame = picam2.capture_array()
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
+            ret, encoded = cv2.imencode(
+                '.jpg', frame,
+                [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
+            )
+            if not ret:
+                continue
+            data = encoded.tobytes()
+            conn.sendall(struct.pack('>I', len(data)) + data)
+
+    except (BrokenPipeError, ConnectionResetError):
+        print("[VIDEO] Mac disconnected")
+    finally:
+        conn.close()
+        server.close()
 
 
 # ── Channel 2: Command Receive (Mac -> Pi) ────────────
