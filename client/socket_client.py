@@ -132,7 +132,7 @@ def detect_red_color(frame):
     x, y, w, h = cv2.boundingRect(largest)
     center_x    = x + w / 2.0
     frame_w     = frame.shape[1]
-    x_error     = (center_x / frame_w - 0.5) * 2.0
+    x_error     = (center_x / frame_w - 0.5) * -2.0
 
     return True, round(x_error, 3), (x, y, w, h)
 
