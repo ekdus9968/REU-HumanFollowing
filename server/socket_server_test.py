@@ -2,15 +2,8 @@
 socket_server_test.py - Run on Pi (HamBot) [TEST MODE]
 Path: ~/Desktop/REU-HumanFollowing/Controller/REU-HumanFollowing/server/socket_server_test.py
 
-Test version - gesture 상관없이 color OR hand 잡히면 바로 follow.
-STOP 없음. 실제 모터 구동.
-
-State Machine (simplified):
-    IDLE       : color X + hand X, target never found -> Stop
-    FOLLOWING  : color O + hand O                     -> 100% speed PID
-    COLOR_ONLY : color O + hand X                     -> 70% speed PID
-    HAND_ONLY  : color X + hand O                     -> 20% speed PID
-    REDETECT   : color X + hand X, 10+ frames         -> spin speed=2
+socket_server.py와 동일하나 CLOSE gesture도 STOP 안 가고 following 유지.
+제스처 상관없이 color OR hand 잡히면 follow.
 """
 
 import sys
@@ -123,7 +116,7 @@ def get_front_distance():
 
 
 def determine_state(color_det, hand_det, target_found):
-    """Simplified - no gesture check, no STOP."""
+    """Test mode: no STOP, gesture ignored, any detection = follow."""
     if not target_found:
         return State.IDLE
     if color_det and hand_det:
@@ -140,7 +133,7 @@ def determine_state(color_det, hand_det, target_found):
 def motor_control_loop():
     global current_state, last_color_x_err, target_ever_found, color_lost_count
 
-    print("[MOTOR] Control loop started (TEST MODE - no gesture check)")
+    print("[MOTOR] Control loop started (TEST MODE)")
 
     while True:
         with lock:
@@ -321,8 +314,7 @@ def command_server():
 # ── Main ───────────────────────────────────────────────
 if __name__ == '__main__':
     print("=== REU-HumanFollowing | HamBot Server [TEST MODE] ===")
-    print("No gesture required - color OR hand detected = follow")
-    print("No STOP state. Ctrl+C to stop.")
+    print("Gesture ignored - color OR hand = follow, no STOP")
 
     t_video = threading.Thread(target=video_stream_server, daemon=True)
     t_cmd   = threading.Thread(target=command_server,      daemon=True)
