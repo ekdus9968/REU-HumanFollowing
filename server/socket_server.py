@@ -6,12 +6,12 @@ Channel 1 (port 5000): Pi camera -> send to Mac
 Channel 2 (port 5001): Receive JSON -> State Machine + PID control
 
 State Machine:
-    IDLE       : Initial state, color+UD_OPEN not yet detected -> Stop
-    FOLLOWING  : color O + hand O + gesture UD_OPEN            -> 100% speed PID
-    COLOR_ONLY : color O + (no hand or non-UD_OPEN gesture)    -> 70% speed PID
+    IDLE       : Initial state, color+OPEN not yet detected -> Stop
+    FOLLOWING  : color O + hand O + gesture OPEN            -> 100% speed PID
+    COLOR_ONLY : color O + (no hand or non-OPEN gesture)    -> 70% speed PID
     HAND_ONLY  : color X + hand O                              -> 20% speed PID (hand x_error)
     REDETECT   : color X + hand X, lost for 10+ frames         -> spin speed=2
-    STOP       : UD_CLOSE gesture                              -> Stop (overrides all)
+    STOP       : CLOSE gesture                              -> Stop (overrides all)
 
 Ref repo (do not modify):
     ~/Desktop/REU-HumanFollowing/Hambot/  <- import via sys.path only
@@ -117,7 +117,7 @@ color_detected    = False
 hand_detected     = False
 current_gesture   = "NONE"
 last_color_x_err  = 0.0
-target_ever_found = False  # True only after color + UD_OPEN detected together
+target_ever_found = False  # True only after color + OPEN detected together
 color_lost_count  = 0      # frames color has been lost consecutively
 stop_gesture_count = 0
 lock = threading.Lock()
@@ -140,7 +140,7 @@ def get_front_distance():
 def determine_state(gesture, color_det, hand_det, target_found):
     """State transition logic."""
     # STOP always takes priority
-    if gesture == "UD_CLOSE":
+    if gesture == "CLOSE":
         return State.STOP
 
     # Before target is found: stay IDLE no matter what
@@ -148,7 +148,7 @@ def determine_state(gesture, color_det, hand_det, target_found):
         return State.IDLE
 
     # After target found: allow state transitions
-    if color_det and hand_det and gesture == "UD_OPEN":
+    if color_det and hand_det and gesture == "OPEN":
         return State.FOLLOWING
     if color_det:
         return State.COLOR_ONLY
@@ -175,15 +175,15 @@ def motor_control_loop():
             t_found = target_ever_found
             last_x  = last_color_x_err
 
-        # UD_CLOSE debounce - 5 consecutive frames to trigger STOP
-        if gesture == "UD_CLOSE":
+        # CLOSE debounce - 5 consecutive frames to trigger STOP
+        if gesture == "CLOSE":
             stop_gesture_count += 1
         else:
             stop_gesture_count = 0
-        filtered_gesture = "UD_CLOSE" if stop_gesture_count >= 5 else gesture
+        filtered_gesture = "CLOSE" if stop_gesture_count >= 5 else gesture
 
-        # Set target_ever_found only when color + UD_OPEN detected together
-        if c_det and gesture == "UD_OPEN":
+        # Set target_ever_found only when color + OPEN detected together
+        if c_det and gesture == "OPEN":
             target_ever_found = True
 
         # Update color lost count and last known direction
