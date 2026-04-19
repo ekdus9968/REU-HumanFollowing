@@ -6,12 +6,13 @@ Channel 1 (port 5000): Pi camera -> send to Mac
 Channel 2 (port 5001): Receive JSON -> State Machine + PID control
 
 State Machine:
-    IDLE       : Initial state, color+OPEN not yet detected -> Stop
-    FOLLOWING  : color O + hand O + gesture OPEN            -> 100% speed PID
-    COLOR_ONLY : color O + (no hand or non-OPEN gesture)    -> 70% speed PID
-    HAND_ONLY  : color X + hand O                              -> 20% speed PID (hand x_error)
-    REDETECT   : color X + hand X, lost for 10+ frames         -> spin speed=2
-    STOP       : CLOSE gesture                              -> Stop (overrides all)
+    IDLE       : color X + hand X, target never found   -> Stop
+    FOLLOWING  : color O + hand O + gesture UD_OPEN     -> 100% speed PID
+    COLOR_ONLY : color O + (no hand or non-UD_OPEN)     -> 70% speed PID
+    HAND_ONLY  : color X + hand O                       -> 20% speed PID (hand x_error)
+    REDETECT   : color X + hand X, after target found,
+                 lost for 10+ frames                    -> spin speed=2
+    STOP       : UD_CLOSE gesture (5 consecutive)       -> Stop
 
 Ref repo (do not modify):
     ~/Desktop/REU-HumanFollowing/Hambot/  <- import via sys.path only
@@ -41,7 +42,7 @@ FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
 TARGET_DISTANCE      = 500   # mm (0.5m)
-MAX_SPEED            = 50    # max motor speed (RPM)
+MAX_SPEED            = 75    # max motor speed (RPM)
 SPIN_SPEED           = 2     # REDETECT spin speed (RPM)
 COLOR_LOST_THRESHOLD = 10    # frames before entering REDETECT
 
@@ -104,7 +105,7 @@ picam2.start()
 
 
 # ── PID Initialization ─────────────────────────────────
-lateral_pid = PID(Kp=5.0,  Ki=0.0, Kd=1.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=20.0, Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 # ──────────────────────────────────────────────────────
 
@@ -117,8 +118,8 @@ color_detected    = False
 hand_detected     = False
 current_gesture   = "NONE"
 last_color_x_err  = 0.0
-target_ever_found = False  # True only after color + OPEN detected together
-color_lost_count  = 0      # frames color has been lost consecutively
+target_ever_found = False
+color_lost_count  = 0
 stop_gesture_count = 0
 lock = threading.Lock()
 # ──────────────────────────────────────────────────────
@@ -139,16 +140,11 @@ def get_front_distance():
 
 def determine_state(gesture, color_det, hand_det, target_found):
     """State transition logic."""
-    # STOP always takes priority
-    if gesture == "CLOSE":
+    if gesture == "UD_CLOSE":
         return State.STOP
-
-    # Before target is found: stay IDLE no matter what
     if not target_found:
         return State.IDLE
-
-    # After target found: allow state transitions
-    if color_det and hand_det and gesture == "OPEN":
+    if color_det and hand_det and gesture == "UD_OPEN":
         return State.FOLLOWING
     if color_det:
         return State.COLOR_ONLY
@@ -161,7 +157,8 @@ def determine_state(gesture, color_det, hand_det, target_found):
 
 def motor_control_loop():
     """State machine + PID motor control loop at 20 Hz."""
-    global current_state, last_color_x_err, target_ever_found, color_lost_count, stop_gesture_count
+    global current_state, last_color_x_err, target_ever_found
+    global color_lost_count, stop_gesture_count
 
     print("[MOTOR] Control loop started")
 
@@ -172,7 +169,6 @@ def motor_control_loop():
             h_x_err = hand_x_error
             c_det   = color_detected
             h_det   = hand_detected
-            t_found = target_ever_found
             last_x  = last_color_x_err
 
         # UD_CLOSE debounce - 5 consecutive frames to trigger STOP
@@ -193,8 +189,8 @@ def motor_control_loop():
         else:
             color_lost_count += 1
 
-        # Determine state using filtered gesture
-        state = determine_state(filtered_gesture, c_det, h_det, t_found)
+        # Determine state using target_ever_found directly (not stale copy)
+        state = determine_state(filtered_gesture, c_det, h_det, target_ever_found)
         with lock:
             current_state = state
 
@@ -212,11 +208,13 @@ def motor_control_loop():
             lateral_pid.reset()
             forward_pid.reset()
 
+            # Stop spinning immediately when color is detected
             if c_det:
                 bot.stop_motors()
                 time.sleep(0.05)
                 continue
 
+            # Spin in last known direction
             if last_x >= 0:
                 left_speed  =  SPIN_SPEED
                 right_speed = -SPIN_SPEED
