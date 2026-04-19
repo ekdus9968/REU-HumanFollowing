@@ -7,7 +7,7 @@ Channel 2 (port 5001): Send JSON control payload -> Pi state machine
 
 JSON payload sent to Pi:
     {
-        "gesture"       : "OPEN" | "CLOSE" | "POINTER" | "OK" | "PEACE" | "UD_OPEN" | "UD_CLOSE" | "NONE",
+        "gesture"       : "OPEN" | "CLOSE" | "POINTER" | "OK" ,
         "color_x_error" : float (-1.0 ~ 1.0),
         "hand_x_error"  : float (-1.0 ~ 1.0),
         "color_detected": bool,
@@ -290,7 +290,7 @@ def command_client():
 if __name__ == '__main__':
     print("=== REU-HumanFollowing | Gesture Client Start ===")
     print(f"Pi: {args.host} | video:{args.video_port} | cmd:{args.cmd_port}")
-    print("Gestures: UD_OPEN=follow | UD_CLOSE=stop | POINTER=quit")
+    print("Gestures: OPEN=follow | CLOSE=stop | POINTER=quit")
     print("Press 'q' in video window to quit")
 
     t_cmd = threading.Thread(target=command_client, daemon=True)

@@ -7,12 +7,12 @@ Channel 2 (port 5001): Receive JSON -> State Machine + PID control
 
 State Machine:
     IDLE       : color X + hand X, target never found   -> Stop
-    FOLLOWING  : color O + hand O + gesture UD_OPEN     -> 100% speed PID
-    COLOR_ONLY : color O + (no hand or non-UD_OPEN)     -> 70% speed PID
+    FOLLOWING  : color O + hand O + gesture OPEN     -> 100% speed PID
+    COLOR_ONLY : color O + (no hand or non-OPEN)     -> 70% speed PID
     HAND_ONLY  : color X + hand O                       -> 20% speed PID (hand x_error)
     REDETECT   : color X + hand X, after target found,
                  lost for 10+ frames                    -> spin speed=2
-    STOP       : UD_CLOSE gesture (5 consecutive)       -> Stop
+    STOP       : CLOSE gesture (5 consecutive)       -> Stop
 
 Ref repo (do not modify):
     ~/Desktop/REU-HumanFollowing/Hambot/  <- import via sys.path only
@@ -105,7 +105,7 @@ picam2.start()
 
 
 # ── PID Initialization ─────────────────────────────────
-lateral_pid = PID(Kp=20.0, Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=10.0, Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 # ──────────────────────────────────────────────────────
 
@@ -139,12 +139,11 @@ def get_front_distance():
 
 
 def determine_state(gesture, color_det, hand_det, target_found):
-    """State transition logic."""
-    if gesture == "UD_CLOSE":
+    if gesture == "CLOSE":
         return State.STOP
     if not target_found:
         return State.IDLE
-    if color_det and hand_det and gesture == "UD_OPEN":
+    if color_det and hand_det and gesture == "OPEN":
         return State.FOLLOWING
     if color_det:
         return State.COLOR_ONLY
@@ -152,7 +151,7 @@ def determine_state(gesture, color_det, hand_det, target_found):
         return State.HAND_ONLY
     if color_lost_count >= COLOR_LOST_THRESHOLD:
         return State.REDETECT
-    return State.IDLE
+    return State.COLOR_ONLY
 
 
 def motor_control_loop():
@@ -171,12 +170,12 @@ def motor_control_loop():
             h_det   = hand_detected
             last_x  = last_color_x_err
 
-        # UD_CLOSE debounce - 5 consecutive frames to trigger STOP
-        if gesture == "UD_CLOSE":
+        # CLOSE debounce - 5 consecutive frames to trigger STOP
+        if gesture == "CLOSE":
             stop_gesture_count += 1
         else:
             stop_gesture_count = 0
-        filtered_gesture = "UD_CLOSE" if stop_gesture_count >= 5 else gesture
+        filtered_gesture = "CLOSE" if stop_gesture_count >= 5 else gesture
 
         # target_ever_found = True when color OR hand detected
         if c_det or h_det:
