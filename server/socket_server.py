@@ -14,6 +14,7 @@ State Machine:
                  lost for 10+ frames                    -> spin speed=2
     STOP       : CLOSE gesture (5 consecutive)       -> Stop
 
+
 Ref repo (do not modify):
     ~/Desktop/REU-HumanFollowing/Hambot/  <- import via sys.path only
 """
