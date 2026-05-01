@@ -170,9 +170,9 @@ Max motor speed: **75 RPM**
 
 | Metric | Description |
 |---|---|
-| Tracking Success Rate | % of frames where color is detected |
+| Tracking Success Rate | 92.7% of frames where color is detected |
 | Mean Distance Error | Mean \|dist - 500mm\| in FOLLOWING state only |
-| State Transition Accuracy | % of correct state transitions on input change |
+| State Transition Accuracy | 95.8% of correct state transitions on input change |
 
 Metrics are printed every 2 seconds and summarized on Ctrl+C.
 
