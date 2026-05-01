@@ -108,6 +108,11 @@ git clone https://github.com/ekdus9968/REU-HumanFollowing.git
 
 ---
 
+## Demo Video
+https://usfedu-my.sharepoint.com/:v:/g/personal/skan_usf_edu/IQCdr5uyBGobSpwhCNhgeNZyAT5W1CWhDGgQ6uPIxfM-iis?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=KcCejw 
+
+---
+
 ## Running
 
 ### Step 1 — Pi (SSH terminal)
