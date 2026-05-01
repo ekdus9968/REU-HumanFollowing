@@ -168,13 +168,23 @@ REDETECT spin speed: **2 RPM**
 
 ---
 
+## Evaluation Metrics (Hand Gesture Model)
+
+| Metric | Description |
+|---|---|
+| TensorFlow Lite  | 98.5% of gesture classification accuracy (stationary) |
+
+Metrics are printed every 2 seconds and summarized on Ctrl+C.
+
+---
+
 ## Evaluation Metrics (socket_server_test.py)
 
 | Metric | Description |
 |---|---|
-| Tracking Success Rate | 93.7% of frames where color is detected |
+| Tracking Success Rate | 92.6% of frames where color is detected |
 | Mean Distance Error | Mean \|dist - 500mm\| in FOLLOWING state only |
-| State Transition Accuracy | 95.2% of correct state transitions on input change |
+| State Transition Accuracy | 98.5% of correct state transitions on input change |
 
 Metrics are printed every 2 seconds and summarized on Ctrl+C.
 
