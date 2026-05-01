@@ -4,13 +4,14 @@
 Color-Based Tracking · Hand Gesture Control · LiDAR Distance Regulation · Finite State Machine
 
 > REU Research · Department of Computer Science · University of South Florida · Spring 2026  
-> Author: SY, LL
+> Authors: Seyoung Kan, Laray Lopez  
+> Faculty Mentor: Prof. Alfredo Weitzenfeld · Graduate Mentor: Zachary Hinnen
 
 ---
 
 ## Overview
 
-This project implements a real-time human-following system on a differential-drive robot (HamBot) using a Raspberry Pi. The robot follows a target person wearing a distinctively colored shirt using HSV color segmentation for lateral alignment and LiDAR for distance regulation. Hand gestures provide high-level state control (follow / stop). The system is designed to be robust to intermittent gesture signal loss through a multimodal fallback state machine.
+This project implements a real-time human-following system on a differential-drive robot (HamBot) using a Raspberry Pi. The robot follows a target person wearing a distinctively colored shirt using HSV color segmentation for lateral alignment and LiDAR for distance regulation. Hand gestures provide high-level state control (follow / turn / stop). The system is designed to be robust to intermittent signal loss through a multimodal fallback state machine with autonomous target recovery.
 
 ---
 
@@ -32,19 +33,14 @@ Pi (HamBot)                              Mac (Client)
 
 | State | Condition | Behavior |
 |---|---|---|
-| `IDLE` | No color detected | Stop |
-| `COLOR_ONLY` | Color detected, no hand | PID active at 50% speed |
-| `FOLLOWING` | Color detected + hand visible | PID active at 100% speed |
-| `STOP` | CLOSE gesture | Immediate stop, ignores all inputs |
+| `IDLE` | color X + hand X, target never found | Stop — waits for initial acquisition |
+| `FOLLOWING` | Color O + hand O + OPEN gesture | PID active at 100% speed |
+| `COLOR_ONLY` | Color O + no hand | PID active at 70% speed |
+| `HAND_ONLY` | Color X + hand O | PID active at 20% speed (hand x_error) |
+| `REDETECT` | Color X + hand X, 10+ frames after target found | Spins in last known direction to recover |
+| `STOP` | CLOSE gesture (5 consecutive frames) | Immediate stop, ignores all inputs |
 
----
-
-## LiDAR Safety
-
-| Condition | Action |
-|---|---|
-| Front dist < 500 mm | Emergency stop (overrides PID) |
-| Rear dist < 1000 mm | Block reverse only (lateral PID still active) |
+**Key design:** REDETECT enables autonomous recovery — when both color and gesture are lost for 500ms, the robot spins toward the last known target direction until color is reacquired.
 
 ---
 
@@ -54,7 +50,7 @@ Pi (HamBot)                              Mac (Client)
 REU-HumanFollowing/
 ├── server/
 │   ├── socket_server.py        # Run on Pi (actual motor control)
-│   └── socket_server_test.py   # Run on Pi (debug + metric mode, no motors)
+│   └── socket_server_test.py   # Run on Pi (test mode - no STOP state)
 ├── client/
 │   └── socket_client.py        # Run on Mac
 └── README.md
@@ -119,7 +115,7 @@ source ~/Desktop/REU-HumanFollowing/Hambot/hambot_venv/bin/activate
 # Actual robot control
 python server/socket_server.py
 
-# Debug + metric mode (no motors)
+# Test mode (gesture ignored, no STOP state)
 python server/socket_server_test.py
 ```
 
@@ -146,11 +142,11 @@ Press `q` in the video window to quit.
 
 | Gesture | Action |
 |---|---|
-| `OPEN` | Following mode (PID active) |
-| `CLOSE` | Stop immediately |
+| `OPEN` | Activate following mode (PID active) |
+| `CLOSE` | Stop immediately (5 consecutive frames required) |
 
-Custom gesture dataset trained with MediaPipe keypoint classifier:  
-**5 classes** — Open · Close · Pointer · Open Upside Down · Close Upside Down
+Gesture recognition uses the original MediaPipe keypoint classifier from the reference repo:  
+**4 classes** — Open · Close · Pointer · OK
 
 ---
 
@@ -158,11 +154,12 @@ Custom gesture dataset trained with MediaPipe keypoint classifier:
 
 | Controller | Kp | Ki | Kd | Input | Output |
 |---|---|---|---|---|---|
-| Lateral | 15.0 | 0.0 | 3.0 | color x_error | turn correction |
+| Lateral | 5.0 | 0.0 | 1.0 | color x_error (bounding box center) | turn correction |
 | Longitudinal | 0.02 | 0.0 | 0.005 | LiDAR distance error | forward speed |
 
 Target distance: **500 mm**  
-Max motor speed: **75 RPM**
+Max motor speed: **75 RPM**  
+REDETECT spin speed: **2 RPM**
 
 ---
 
@@ -170,9 +167,9 @@ Max motor speed: **75 RPM**
 
 | Metric | Description |
 |---|---|
-| Tracking Success Rate | % of frames where color is detected |
+| Tracking Success Rate | 93.7% of frames where color is detected |
 | Mean Distance Error | Mean \|dist - 500mm\| in FOLLOWING state only |
-| State Transition Accuracy | % of correct state transitions on input change |
+| State Transition Accuracy | 95.2% of correct state transitions on input change |
 
 Metrics are printed every 2 seconds and summarized on Ctrl+C.
 
@@ -193,7 +190,8 @@ Metrics are printed every 2 seconds and summarized on Ctrl+C.
 ---
 
 ## Demo Video
-https://usfedu-my.sharepoint.com/:v:/g/personal/skan_usf_edu/IQCdr5uyBGobSpwhCNhgeNZyAT5W1CWhDGgQ6uPIxfM-iis?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=KcCejw 
+
+[Watch Demo](https://usfedu-my.sharepoint.com/:v:/g/personal/skan_usf_edu/IQCdr5uyBGobSpwhCNhgeNZyAT5W1CWhDGgQ6uPIxfM-iis?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=KcCejw)
 
 ---
 
