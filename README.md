@@ -140,13 +140,18 @@ Press `q` in the video window to quit.
 
 ## Gesture Control
 
-| Gesture | Action |
+| Gesture | Action | Upside Down |
 |---|---|
-| `OPEN` | Activate following mode (PID active) |
-| `CLOSE` | Stop immediately (5 consecutive frames required) |
+| `OPEN` | Activate following mode (PID active) | YES
+| `CLOSE` | Stop immediately (5 consecutive frames required) | YES
+| `POINTER` | | NO
+| `OKAY` | | NO
+| `PEACE` | End the program | NO
 
 Gesture recognition uses the original MediaPipe keypoint classifier from the reference repo:  
 **4 classes** — Open · Close · Pointer · OK
+
+We retrained gestures using new data. 
 
 ---
 
