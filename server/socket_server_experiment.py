@@ -128,7 +128,7 @@ picam2.configure(picam2.create_video_configuration(
 picam2.start()
 # ──────────────────────────────────────────────────────
 
-lateral_pid = PID(Kp=5.0,  Ki=0.0, Kd=1.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=7.0,  Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 
 # ── Global State ───────────────────────────────────────
@@ -400,10 +400,10 @@ def motor_control_loop():
 
             if state == State.FOLLOWING:
                 speed_ratio = SPEED_FOLLOWING
-                lateral_err_used = last_color_x_err if not c_det else c_x_err
+                lateral_err_used = c_x_err
             elif state == State.COLOR_ONLY:
                 speed_ratio = SPEED_COLOR_ONLY
-                lateral_err_used = last_color_x_err if not c_det else c_x_err
+                lateral_err_used = c_x_err
             elif state == State.HAND_ONLY:
                 speed_ratio = SPEED_HAND_ONLY
                 lateral_err_used = h_x_err
