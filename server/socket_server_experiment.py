@@ -128,7 +128,7 @@ picam2.configure(picam2.create_video_configuration(
 picam2.start()
 # ──────────────────────────────────────────────────────
 
-lateral_pid = PID(Kp=10.0,  Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
+lateral_pid = PID(Kp=15.0,  Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
 forward_pid = PID(Kp=0.02, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 
 # ── Global State ───────────────────────────────────────
