@@ -27,7 +27,7 @@ import csv
 import argparse
 
 # hand-gesture-recognition-mediapipe clone path (do not modify)
-GESTURE_REPO = '/Users/seyoung/Documents/USF/CLASS/Spring2026/CIS4915/REU-HumanFollowing/hand-gesture-recognition-mediapipe'
+GESTURE_REPO = '/Users/laraylopez/Desktop/Summer2026/Research/REU-HumanFollowing/hand-gesture-recognition-mediapipe'
 sys.path.append(GESTURE_REPO)
 os.chdir(GESTURE_REPO)
 
@@ -71,8 +71,8 @@ if GROUND_TRUTH not in LABEL_TO_ID:
 
 # ── Output paths ───────────────────────────────────────
 LOG_DIR = os.path.join(
-    '/Users/seyoung/Documents/USF/CLASS/Spring2026/CIS4915/REU-HumanFollowing/Hambot/client',
-    "logs"
+    '/Users/laraylopez/Desktop/Summer2026/Research/REU-HumanFollowing/Controller',
+    "logs_hand_gesture"
 )
 os.makedirs(LOG_DIR, exist_ok=True)
 RAW_PATH     = os.path.join(LOG_DIR, f"gesture_stream_{GROUND_TRUTH}_raw.csv")
