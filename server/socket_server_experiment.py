@@ -202,11 +202,11 @@ def get_front_distance():
 
 def determine_state(gesture, color_det, hand_det, target_found):
     """State transition logic (identical to socket_server.py)."""
-    if gesture == "CLOSE":
+    if gesture == "UD_Close":
         return State.STOP
     if not target_found:
         return State.IDLE
-    if color_det and hand_det and gesture == "OPEN":
+    if color_det and hand_det and gesture == "UD_Open":
         return State.FOLLOWING
     if color_det:
         return State.COLOR_ONLY
