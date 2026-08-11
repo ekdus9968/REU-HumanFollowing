@@ -129,7 +129,7 @@ picam2.start()
 # ──────────────────────────────────────────────────────
 
 lateral_pid = PID(Kp=10.0,  Ki=0.0, Kd=2.0,   output_limit=MAX_SPEED)
-forward_pid = PID(Kp=3.0, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
+forward_pid = PID(Kp=10.0, Ki=0.0, Kd=0.005, output_limit=MAX_SPEED)
 
 # ── Global State ───────────────────────────────────────
 current_state      = State.IDLE
