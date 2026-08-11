@@ -43,8 +43,8 @@ FRAME_HEIGHT = 480
 JPEG_QUALITY = 60
 
 TARGET_DISTANCE      = 500   # mm (0.5m)
-MAX_SPEED            = 75    # max motor speed (RPM)
-SPIN_SPEED           = 2     # REDETECT spin speed (RPM)
+MAX_SPEED            = 0    # max motor speed (RPM)
+SPIN_SPEED           = 0     # REDETECT spin speed (RPM)
 COLOR_LOST_THRESHOLD = 10    # frames before entering REDETECT
 
 SPEED_FOLLOWING  = 1.0       # 100%
