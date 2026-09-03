@@ -77,6 +77,9 @@ GESTURE_LABELS = {
     1: "CLOSE",
     2: "POINTER",
     3: "OK",
+    4: "Terminate",
+    5: "UD_Open",
+    6: "UD_Close",
 }
 # ──────────────────────────────────────────────────────
 
